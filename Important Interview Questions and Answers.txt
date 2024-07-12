@@ -1,0 +1,344 @@
+SQL interview questions for Interview Preparation:
+
+
+1. Write a query to find all employees who earn more than the average salary.
+SELECT 
+    employee_id,
+    employee_name,
+    salary
+FROM 
+    employees
+WHERE 
+    salary > (SELECT AVG(salary) FROM employees);
+
+2. Write a query to retrieve the names of employees who work in the same department as ‘John’.
+SELECT 
+    employee_name
+FROM 
+    employees
+WHERE 
+    department_id = (
+        SELECT 
+            department_id
+        FROM 
+            employees
+        WHERE 
+            employee_name = 'John'
+    )
+AND 
+    employee_name <> 'John';
+
+3. Write a query to display the second highest salary from the Employee table.
+SELECT MAX(salary) AS second_highest_salary
+FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+
+SELECT salary AS second_highest_salary
+FROM (
+    SELECT salary, ROW_NUMBER() OVER (ORDER BY salary DESC) AS row_num
+    FROM employees
+) AS temp
+WHERE row_num = 2;
+
+SELECT 
+    salary
+FROM 
+    employees
+ORDER BY 
+    salary DESC
+LIMIT 1 OFFSET 1;
+
+
+4. Write a query to find all customers who have made more than five orders.
+
+SELECT 
+    c.customer_id,
+    c.customer_name
+FROM 
+    customers c
+JOIN 
+    orders o ON c.customer_id = o.customer_id
+GROUP BY 
+    c.customer_id,
+    c.customer_name
+HAVING 
+    COUNT(o.order_id) > 5;
+
+5. Write a query to count the number of orders placed by each customer.
+
+SELECT 
+    c.customer_id,
+    c.customer_name,
+    COUNT(o.order_id) AS order_count
+FROM 
+    customers c
+LEFT JOIN 
+    orders o ON c.customer_id = o.customer_id
+GROUP BY 
+    c.customer_id,
+    c.customer_name;
+
+6. Write a query to retrieve the list of employees who joined in the last 6 months.
+
+SELECT 
+    employee_id,
+    employee_name,
+    hire_date
+FROM 
+    employees
+WHERE 
+    hire_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH);
+
+SELECT 
+    employee_id,
+    employee_name,
+    hire_date
+FROM 
+    employees
+WHERE 
+    hire_date >= DATEADD(MONTH, -6, GETDATE());
+
+SELECT 
+    employee_id,
+    employee_name,
+    hire_date
+FROM 
+    employees
+WHERE 
+    hire_date >= ADD_MONTHS(SYSDATE, -6);
+
+7. Write a query to find the total sales amount per product.
+
+SELECT 
+    p.product_id,
+    p.product_name,
+    SUM(s.sale_amount) AS total_sales_amount
+FROM 
+    products p
+JOIN 
+    sales s ON p.product_id = s.product_id
+GROUP BY 
+    p.product_id,
+    p.product_name;
+
+
+8. Write a query to list all products that have never been sold.
+
+SELECT 
+    p.product_id,
+    p.product_name
+FROM 
+    products p
+LEFT JOIN 
+    sales s ON p.product_id = s.product_id
+WHERE 
+    s.product_id IS NULL;
+
+9. Write a query to update the salary of employees based on their performance rating.
+
+UPDATE employees
+SET salary = 
+    CASE 
+        WHEN performance_rating = 'Excellent' THEN salary * 1.1  -- Increase by 10%
+        WHEN performance_rating = 'Good' THEN salary * 1.05     -- Increase by 5%
+        ELSE salary                                               -- No change for other ratings
+    END
+WHERE performance_rating IN ('Excellent', 'Good');
+
+10. Write a query to delete duplicate rows from a table.
+
+DELETE FROM your_table
+WHERE ROWID NOT IN (
+    SELECT MIN(ROWID)
+    FROM your_table
+    GROUP BY <column(s)_to_check_duplicates_on>
+);
+
+WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY <column(s)_to_check_duplicates_on> ORDER BY <ordering_column>) AS RowNum
+    FROM your_table
+)
+DELETE FROM CTE
+WHERE RowNum > 1;
+
+11. Write a query to find the second highest salary in a company without using the MAX function twice.
+
+SELECT DISTINCT salary
+FROM employees
+ORDER BY salary DESC
+LIMIT 1 OFFSET 1;
+
+WITH RankedSalaries AS (
+    SELECT salary, ROW_NUMBER() OVER (ORDER BY salary DESC) AS rank
+    FROM employees
+)
+SELECT salary
+FROM RankedSalaries
+WHERE rank = 2; 
+
+12. Write a query to identify the top 10 customers who have not placed an order in the last year.
+
+SELECT TOP 10
+    c.customer_id,
+    c.customer_name,
+    c.email,
+    COUNT(o.order_id) AS total_orders
+FROM
+    customers c
+LEFT JOIN
+    orders o ON c.customer_id = o.customer_id
+        AND o.order_date >= DATEADD(YEAR, -1, GETDATE())  -- Orders placed within the last year
+WHERE
+    o.order_id IS NULL  -- Customers who have not placed any orders in the last year
+GROUP BY
+    c.customer_id,
+    c.customer_name,
+    c.email
+ORDER BY
+    total_orders DESC;
+
+13. Create a query to compute the year-over-year growth rate of revenue for each product category.
+
+SELECT
+    current_year.category,
+    EXTRACT(YEAR FROM current_year.order_date) AS current_year,
+    SUM(current_year.revenue) AS current_year_revenue,
+    EXTRACT(YEAR FROM previous_year.order_date) AS previous_year,
+    SUM(previous_year.revenue) AS previous_year_revenue,
+    (SUM(current_year.revenue) - SUM(previous_year.revenue)) / SUM(previous_year.revenue) AS growth_rate
+FROM
+    sales current_year
+JOIN
+    sales previous_year ON current_year.category = previous_year.category
+                          AND EXTRACT(YEAR FROM current_year.order_date) = EXTRACT(YEAR FROM previous_year.order_date) + 1
+GROUP BY
+    current_year.category, EXTRACT(YEAR FROM current_year.order_date), EXTRACT(YEAR FROM previous_year.order_date);
+
+WITH RevenueByYear AS (
+    SELECT
+        YEAR(o.order_date) AS order_year,
+        p.product_category,
+        SUM(o.order_amount) AS total_revenue
+    FROM
+        orders o
+    JOIN
+        products p ON o.product_id = p.product_id
+    GROUP BY
+        YEAR(o.order_date),
+        p.product_category
+),
+YoYRevenueGrowth AS (
+    SELECT
+        order_year,
+        product_category,
+        total_revenue,
+        LAG(total_revenue) OVER (PARTITION BY product_category ORDER BY order_year) AS prev_year_revenue,
+        CASE
+            WHEN LAG(total_revenue) OVER (PARTITION BY product_category ORDER BY order_year) <> 0 THEN
+                (total_revenue - LAG(total_revenue) OVER (PARTITION BY product_category ORDER BY order_year)) /
+                LAG(total_revenue) OVER (PARTITION BY product_category ORDER BY order_year) * 100
+            ELSE
+                NULL
+        END AS yoy_growth_rate
+    FROM
+        RevenueByYear
+)
+SELECT
+    order_year,
+    product_category,
+    total_revenue,
+    COALESCE(yoy_growth_rate, 0) AS yoy_growth_rate
+FROM
+    YoYRevenueGrowth
+ORDER BY
+    product_category,
+    order_year;
+
+14. Write a query to join three tables and filter the results to show only records that exist in exactly two of the tables.
+
+  -- Records existing in table1 and table2
+    SELECT t1.*
+    FROM table1 t1
+    JOIN table2 t2 ON t1.common_column = t2.common_column
+    
+    UNION ALL
+    
+    -- Records existing in table1 and table3
+    SELECT t1.*
+    FROM table1 t1
+    JOIN table3 t3 ON t1.common_column = t3.common_column
+    
+    UNION ALL
+    
+    -- Records existing in table2 and table3
+    SELECT t2.*
+    FROM table2 t2
+    JOIN table3 t3 ON t2.common_column = t3.common_column
+) AS Combined
+GROUP BY common_column
+HAVING COUNT(*) = 2;
+
+15. Construct a query to find the median sales amount for each region.
+
+WITH MedianSales AS (
+    SELECT
+        region,
+        sales_amount,
+        ROW_NUMBER() OVER (PARTITION BY region ORDER BY sales_amount) AS RowNum,
+        COUNT(*) OVER (PARTITION BY region) AS TotalRows
+    FROM
+        sales
+)
+SELECT
+    region,
+    AVG(sales_amount) AS median_sales_amount
+FROM
+    MedianSales
+WHERE
+    RowNum BETWEEN CEILING(TotalRows / 2.0) AND FLOOR(TotalRows / 2.0) + 1
+GROUP BY
+    region;
+
+16. Write a query to calculate the retention rate of customers over a given time period.
+
+-- Calculate retention rate over a given time period
+WITH RetainedCustomers AS (
+    SELECT DISTINCT customer_id
+    FROM orders
+    WHERE order_date >= DATE_SUB(NOW(), INTERVAL 1 YEAR)  -- Adjust the time period as needed
+),
+TotalCustomers AS (
+    SELECT DISTINCT customer_id
+    FROM orders
+    WHERE order_date >= DATE_SUB(NOW(), INTERVAL 1 YEAR)  -- Adjust the time period as needed
+    UNION
+    SELECT DISTINCT customer_id
+    FROM orders
+    WHERE order_date < DATE_SUB(NOW(), INTERVAL 1 YEAR)   -- Customers acquired before the time period
+)
+SELECT
+    COUNT(DISTINCT rc.customer_id) AS retained_customers,
+    COUNT(DISTINCT tc.customer_id) AS total_customers,
+    COUNT(DISTINCT rc.customer_id) / COUNT(DISTINCT tc.customer_id) AS retention_rate
+FROM
+    RetainedCustomers rc
+JOIN
+    TotalCustomers tc ON rc.customer_id = tc.customer_id;
+
+17. Write a query to find duplicate records in a table and count the number of duplicates for each unique record.
+
+SELECT id, column1, column2, COUNT(*) AS duplicate_count
+FROM your_table
+GROUP BY id, column1, column2
+HAVING COUNT(*) > 1
+ORDER BY duplicate_count DESC;
+
+18. Create a query to find employees who have been with the company for more than 5 years but have never been promoted.
+
+SELECT e.employee_id, e.employee_name, e.hire_date
+FROM employees e
+LEFT JOIN promotions p ON e.employee_id = p.employee_id
+WHERE 
+    DATEDIFF(CURDATE(), e.hire_date) > 5 * 365  -- More than 5 years of service
+    AND p.employee_id IS NULL;  -- Never been promoted
